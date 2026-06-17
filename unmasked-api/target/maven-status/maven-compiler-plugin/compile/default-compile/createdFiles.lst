@@ -1,0 +1,12 @@
+com\unmasked\repository\CaseReportRepository.class
+com\unmasked\config\RedisConfig$WebSocketEventForwarder.class
+com\unmasked\service\CaseService.class
+com\unmasked\model\Case.class
+com\unmasked\UnmaskedApiApplication.class
+com\unmasked\repository\CaseRepository.class
+com\unmasked\config\RedisConfig.class
+com\unmasked\model\CaseReport.class
+com\unmasked\controller\CaseController.class
+com\unmasked\config\GlobalExceptionHandler.class
+com\unmasked\dto\CreateCaseRequest.class
+com\unmasked\config\WebSocketConfig.class

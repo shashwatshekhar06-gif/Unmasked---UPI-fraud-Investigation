@@ -1,0 +1,31 @@
+@keyframes edgeDraw {
+  from { stroke-dashoffset: 200; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes nodePulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+@keyframes rippleOut {
+  0% { r: 6; opacity: 0.5; }
+  100% { r: 22; opacity: 0; }
+}
+.net-bg {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 55%;
+  height: 100%;
+  opacity: 0.3;
+  pointer-events: none;
+}
+.net-edge {
+  stroke-dasharray: 200;
+  animation: edgeDraw 2s ease forwards;
+}
+.net-node {
+  animation: nodePulse 3s ease infinite;
+}
+.net-ripple {
+  animation: rippleOut 2.5s ease infinite;
+}
