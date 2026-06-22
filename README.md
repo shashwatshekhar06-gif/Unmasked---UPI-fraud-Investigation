@@ -1,230 +1,264 @@
-# 🔍 InfoFetch AI — Intelligent Research Platform
+# UNMASKED — Autonomous UPI Fraud Investigation System
 
-> AI-powered company intelligence and market research, built for professionals who demand excellence.
+UNMASKED takes a single fraud UPI ID and autonomously traces the entire money trail, maps every connected mule account, classifies the scam pattern, and generates a police-ready evidence report — in under 5 minutes.
 
-![Python](https://img.shields.io/badge/Python-3.9+-blue?style=flat-square&logo=python)
-![Streamlit](https://img.shields.io/badge/Streamlit-1.x-red?style=flat-square&logo=streamlit)
-![OpenAI](https://img.shields.io/badge/OpenAI-GPT--3.5--turbo-green?style=flat-square&logo=openai)
-![LangChain](https://img.shields.io/badge/LangChain-Latest-yellow?style=flat-square)
-![Razorpay](https://img.shields.io/badge/Payments-Razorpay-blue?style=flat-square)
+UPI fraud hit ₹22,845 crore in India in 2024, with only a 6% recovery rate. The bottleneck isn't detection — banks already flag suspicious transactions. The problem is investigation speed. When money bounces through 3-5 mule accounts in minutes, manually tracing the chain across different banks takes 3-6 months. By then, the money is gone.
+
+UNMASKED automates this entire investigation pipeline.
 
 ---
 
-## 📌 What is InfoFetch AI?
+## How It Works
 
-InfoFetch AI is a full-stack AI research platform that lets users instantly research companies, job markets, salaries, and general topics using a combination of real-time web search and GPT-3.5-turbo. It features a dual-mode interface — a **deep research engine** for structured reports and an **AI chatbot** for quick conversational Q&A.
+A victim submits the fraudster's UPI ID through the web interface. The system queues the case via Redis to a Python Celery worker, which runs a LangGraph multi-agent pipeline. Five AI agents work in sequence (with the first two running in parallel):
 
----
+1. **Transaction Tracer** — walks the money chain hop by hop using BFS graph traversal
+2. **Identity Intelligence** — scores every account for mule probability using a trained XGBoost model, with SHAP explainability for each prediction
+3. **Scam Pattern Classifier** — matches the case against known fraud patterns using cosine similarity search over RBI/NPCI advisory embeddings (RAG)
+4. **Network Expansion** — runs a 3-hop BFS traversal via PostgreSQL recursive CTEs to map the entire connected syndicate
+5. **Report Generator** — produces a structured evidence document constrained to only cite verified facts
 
-## ✨ Features
-
-### 🏢 Company Intelligence
-- Full company profiles: CEO, founding year, headquarters, revenue, employee count
-- Contact information: official email, phone, address, LinkedIn, careers page
-- Career opportunities: entry-level roles, required skills, salary ranges, hiring status
-- Work culture: environment, perks, and company values
-
-### 🔍 General Research Engine
-- Multi-source web search via SerpAPI (5 targeted queries per research)
-- AI-structured output with overview, key insights, expert analysis, and sources
-- Confidence scoring (High / Medium / Low)
-
-### 💬 AI Chatbot
-- Conversational Q&A powered by `gpt-3.5-turbo`
-- Persistent chat history saved to database
-- Smart routing — quick questions answered inline, complex queries redirected to research
-- Supports greetings, follow-ups, and contextual conversation
-
-### 📚 Search History
-- Full history of past research saved per user
-- Re-view, re-run, or delete individual searches
-- Stats dashboard: total searches, chat messages, average confidence
-
-### 💳 Subscription Plans & Payments
-| Plan     | Price     | Searches/Day | Features                        |
-|----------|-----------|---------------|---------------------------------|
-| Free     | $0        | 10            | Basic research, community support |
-| Plus ⭐   | ₹19/month | 100           | Advanced insights, PDF export    |
-| Premium 👑| ₹49/month | Unlimited     | API access, team collaboration   |
-
-Payments are processed securely via **Razorpay**.
-
-### 🌟 Feedback System
-- Multi-dimensional rating: overall experience, accuracy, speed, UI
-- Feature request tracking
-- Public testimonials toggle
-- Feedback feeds directly into the landing page reviews section
+The React frontend renders the fraud network in real time using Cytoscape.js as agents complete, and generates a downloadable PDF evidence report with legal sections, SHAP explanations, and recommended actions.
 
 ---
 
-## 🛠️ Tech Stack
-
-| Layer         | Technology                          |
-|---------------|--------------------------------------|
-| Frontend      | Streamlit (custom CSS, Space Grotesk / Inter fonts) |
-| AI Models     | OpenAI GPT-3.5-turbo (research + chat) |
-| Search        | SerpAPI via LangChain `SerpAPIWrapper` |
-| Orchestration | LangChain (`langchain-openai`, `langchain-community`) |
-| Database      | SQLite (users, search history, chat, payments, feedback) |
-| Payments      | Razorpay (INR, test + live mode)     |
-| Auth          | Username/password with DB verification |
-
----
-
-## 📁 Project Structure
+## Architecture
 
 ```
-InfoFetch-AI/
-├── app.py                  # Main Streamlit app — all pages & UI
-├── serp.py                 # Core AI engine — research, chatbot, LLM calls
-├── db_utils.py             # Database helpers — users, history, feedback, payments
-├── razorpay_handler.py     # Razorpay order creation & signature verification
-├── migrate_db.py           # One-time DB migration script (adds 'plan' column)
-├── api.env                 # 🔒 API keys (NOT committed to git — see setup)
-├── api.env.example         # Template for required environment variables
-├── requirements.txt        # Python dependencies
-└── infofetch_ai.db         # SQLite database (auto-created on first run)
+┌─────────────┐     ┌──────────────────┐     ┌─────────────┐
+│   React +   │────▶│  Spring Boot     │────▶│   Redis     │
+│ Cytoscape.js│◀────│  REST + WebSocket│     │  Job Queue  │
+└─────────────┘     └──────────────────┘     └──────┬──────┘
+                                                     │
+                                                     ▼
+┌─────────────┐     ┌──────────────────┐     ┌─────────────┐
+│ PostgreSQL  │◀────│  Celery Worker   │◀────│  FastAPI    │
+│ + pgvector  │────▶│  LangGraph 5     │     │  Endpoints  │
+└─────────────┘     │  Agents          │     └─────────────┘
+                    └──────────────────┘
+```
+
+Spring Boot and Python never call each other directly. Redis is the only coupling point — clean distributed systems design.
+
+---
+
+## Key Features
+
+**Trained ML Classifier** — XGBoost model trained on transaction data from the VPA registry. 98.95% F1 score on the synthetic dataset (47 mules out of 1,379 accounts). Replaces hand-coded heuristics with a real learned model.
+
+**SHAP Explainability** — Every flagged account comes with a human-readable breakdown of why it was flagged. "Extremely high fraud risk score on record", "Newly created account — a common mule account trait", "Receives and forwards funds in rapid succession." RBI compliance requires explainable decisions, not black boxes.
+
+**Graph-Based Features** — Degree centrality, fan-out ratio, and cluster coefficient computed from the transaction network. Mule accounts are defined by their position in a network, not just individual attributes.
+
+**Temporal Lifecycle Detection** — Mule accounts follow a lifecycle: created, dormant, burst of activity, abandoned. The system detects accounts in their "Active Burst" phase and flags them with activity concentration metrics and lifespan data.
+
+**Live Fraud Network Visualization** — React + Cytoscape.js renders networks of 300+ nodes with depth-by-depth animation. Click any node to see risk score, bank, graph metrics, lifecycle phase, SHAP explanations, and flags.
+
+**Alert Prioritization Dashboard** — Completed investigations ranked by a composite priority score (ML probability × network size × transaction volume). The most dangerous syndicates surface first.
+
+**Analyst Feedback Loop** — Bank fraud analysts can confirm or reject mule classifications. Confirmed mules increase VPA risk scores; false positives decrease them. Accumulated feedback feeds into model retraining.
+
+**RBI/NPCI Compliance Mapping** — Every alert maps to specific RBI circulars, NPCI advisories, IT Act sections, and IPC/BNS sections tied to the detected scam pattern. Legal standing for account freezes and auditor-ready documentation.
+
+**PDF Evidence Reports** — Professional A4 reports with case overview, money trail analysis, high-risk accounts table, legal framework, confidence assessment, and recommended next steps. Designed to be attached to an FIR.
+
+**Error Handling for Unknown VPAs** — If a submitted VPA hasn't been seen before, the system registers it for future intelligence linking and shows actionable guidance: file on cybercrime.gov.in, call 1930, contact your bank, preserve evidence.
+
+---
+
+## Tech Stack
+
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| API Layer | Java Spring Boot 3.2 | REST endpoints, WebSocket for live updates, Redis job dispatch |
+| Agent Pipeline | Python, LangGraph, Celery | Multi-agent state machine, async task processing |
+| ML Models | XGBoost, scikit-learn, SHAP | Mule account classification and explainability |
+| Database | PostgreSQL + pgvector | Transaction storage, BFS via recursive CTEs, RAG embeddings |
+| Message Queue | Redis | Async producer-consumer between Java and Python |
+| Frontend | React, Cytoscape.js | Live fraud network graph, investigation dashboard |
+| LLM | GPT-4o-mini (temp 0.1) | Constrained report generation, zero hallucination |
+| PDF | ReportLab | Professional evidence report generation |
+
+---
+
+## Project Structure
+
+```
+unmasked/
+├── unmasked-api/                    # Java Spring Boot
+│   └── src/main/java/com/unmasked/api/
+│       ├── CaseController.java      # REST endpoints
+│       ├── CaseService.java         # Business logic + Redis dispatch
+│       ├── WebSocketConfig.java     # STOMP over SockJS
+│       └── RedisConfig.java         # Pub/sub → WebSocket bridge
+│
+├── unmasked-agents/                 # Python pipeline
+│   ├── agents/agents.py             # 5 LangGraph agents + compliance mapping
+│   ├── models/
+│   │   ├── investigation_state.py   # LangGraph state with Annotated merge
+│   │   ├── mule_classifier.pkl      # Trained XGBoost model
+│   │   └── feature_names.json       # Feature metadata
+│   ├── services/
+│   │   ├── pipeline.py              # LangGraph StateGraph definition
+│   │   ├── ml_model.py              # XGBoost + SHAP prediction
+│   │   ├── celery_app.py            # Celery worker + queue consumer
+│   │   ├── db.py                    # Database operations + graph metrics + temporal profiles
+│   │   ├── embeddings.py            # pgvector cosine similarity search
+│   │   ├── vpa_utils.py             # Mule confidence + ML prediction
+│   │   ├── ws_emitter.py            # Redis pub/sub events
+│   │   ├── pdf_report.py            # ReportLab PDF generation
+│   │   ├── alert_queue.py           # Priority scoring
+│   │   └── feedback.py              # Analyst verdict storage
+│   ├── api/main.py                  # FastAPI endpoints
+│   └── train_model.py               # Standalone model training script
+│
+├── unmasked-frontend/               # React + Vite
+│   └── src/
+│       ├── pages/
+│       │   ├── Landing.jsx          # Home page
+│       │   ├── Investigate.jsx      # Case submission + live graph
+│       │   ├── CaseResults.jsx      # Results + graph + report + feedback
+│       │   └── AlertDashboard.jsx   # Prioritized alert queue
+│       └── components/
+│           ├── Navbar.jsx
+│           └── NetworkGraphBg.jsx
+│
+├── docker-compose.yml               # PostgreSQL + Redis containers
+├── schema.sql                       # Database schema
+├── generate_synthetic_data.py       # 500 fraud cases, 7 archetypes
+├── seed_knowledge_base.py           # RBI/NPCI advisory embeddings
+├── train_model.py                   # ML model training
+└── requirements.txt                 # Python dependencies
 ```
 
 ---
 
-## 🚀 Getting Started
+## Setup and Installation
 
-### 1. Clone the repository
+### Prerequisites
+- Java JDK 21 (Adoptium)
+- Python 3.12
+- Node.js 18+
+- Docker Desktop
+- Maven 3.9+
 
+### 1. Start the databases
 ```bash
-git clone https://github.com/shashwatshekhar06-gif/InfoTech-AI.git
-cd InfoTech-AI
+cd unmasked
+docker compose up -d
 ```
 
-### 2. Create a virtual environment
+### 2. Set up environment
+Copy `.env.example` to `.env` and add your OpenAI API key:
+```
+OPENAI_API_KEY=sk-your-key-here
+DATABASE_URL=postgresql://unmasked:unmasked@localhost:5432/unmasked
+REDIS_URL=redis://localhost:6379/0
+```
 
+### 3. Install Python dependencies and train the model
 ```bash
 python -m venv venv
-# Windows
-venv\Scripts\activate
-# macOS/Linux
-source venv/bin/activate
-```
-
-### 3. Install dependencies
-
-```bash
+venv\Scripts\activate        # Windows
 pip install -r requirements.txt
+python generate_synthetic_data.py
+python seed_knowledge_base.py
+cd unmasked-agents
+python train_model.py
 ```
 
-### 4. Configure API keys
-
-Create an `api.env` file in the project root (this file is gitignored):
-
-```env
-OPENAI_API_KEY=sk-your-openai-api-key-here
-SERPAPI_API_KEY=your-serpapi-key-here
-RAZORPAY_KEY_ID=rzp_test_your-key-id
-RAZORPAY_KEY_SECRET=your-razorpay-secret
-```
-
-> ⚠️ **Never commit `api.env` to git.** It is listed in `.gitignore` for this reason.
-
-### 5. Run database migration (first time only)
-
+### 4. Install frontend dependencies
 ```bash
-python migrate_db.py
+cd unmasked-frontend
+npm install
 ```
 
-### 6. Launch the app
+### 5. Run all services (5 terminals)
 
+**Terminal 1 — Spring Boot API:**
 ```bash
-streamlit run app.py
+cd unmasked-api
+mvn spring-boot:run
 ```
 
-The app will open at `http://localhost:8501`
-
----
-
-## 🔑 Demo Accounts
-
-| Username   | Password      | Plan   |
-|------------|---------------|--------|
-| admin      | secure123     | Free   |
-| researcher | research2024  | Free   |
-| analyst    | analyst2024   | Free   |
-| manager    | manager2024   | Free   |
-| executive  | exec2024      | Free   |
-
----
-
-## 🧠 How the Research Engine Works
-
-1. **Query Classification** — Detects whether the query is about a company or a general topic using keyword matching and regex patterns
-2. **Company Name Extraction** — Identifies the target company from known lists and NLP patterns
-3. **Targeted Web Searches** — Runs 5 parallel SerpAPI queries covering: contact info, careers, company overview, LinkedIn, and salary/culture
-4. **LLM Extraction** — GPT-3.5-turbo (JSON mode, temperature=0.1) extracts structured data from search results
-5. **Post-Processing** — Fills any remaining unknown fields using pattern-based URL construction and known company data
-6. **Fallback Handling** — If JSON parsing fails, a smart fallback extracts key data from raw search results
-
----
-
-## 🔒 Security Notes
-
-- API keys are loaded from `api.env` using `python-dotenv` — never hardcoded
-- `api.env` is listed in `.gitignore` — should never be committed
-- Razorpay payments use HMAC-SHA256 signature verification
-- All user passwords should be hashed in production (see `db_utils.py`)
-
----
-
-## 📦 Requirements
-
-```
-streamlit
-langchain
-langchain-openai
-langchain-community
-openai
-google-search-results   # SerpAPI
-razorpay
-python-dotenv
-```
-
-Install all with:
-
+**Terminal 2 — FastAPI + Agents:**
 ```bash
-pip install -r requirements.txt
+cd unmasked-agents
+python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
 
----
+**Terminal 3 — Celery Worker:**
+```bash
+cd unmasked-agents
+celery -A services.celery_app worker --loglevel=info --pool=solo
+```
 
-## 🗺️ Roadmap
+**Terminal 4 — Frontend:**
+```bash
+cd unmasked-frontend
+npm run dev
+```
 
-- [ ] Mobile-responsive layout
-- [ ] PDF export of research reports
-- [ ] Bulk research mode
-- [ ] Email digest / alerts
-- [ ] REST API for external integrations
-- [ ] Multi-language support
-- [ ] Visual charts and graphs for data
-- [ ] CRM integrations (HubSpot, Salesforce)
-
----
-
-## 🙌 Contributing
-
-Pull requests are welcome. For major changes, please open an issue first to discuss what you'd like to change.
+Open `http://localhost:3000`
 
 ---
 
-## 📄 License
+## Demo
 
-MIT License — see `LICENSE` for details.
+### Test VPAs from the synthetic dataset:
+
+| VPA | Expected Result |
+|-----|----------------|
+| `rk_op05@ybl` | 311-node syndicate network, OLX Marketplace Scam, 62% confidence |
+| `8873471434@ybl` | 233-node network, complete money trail with 10+ hops |
+| `ashok_tiwari20@oksbi` | Medium network, KYC Phishing classification |
+
+Submit any VPA with a unique transaction reference and an amount to start an investigation.
 
 ---
 
-## 👨‍💻 Author
+## ML Model Performance
 
-Built by **Shashwat Shekhar**  
-GitHub: [@shashwatshekhar06-gif](https://github.com/shashwatshekhar06-gif)
+Trained on 1,379 VPAs (47 mules / 1,332 legitimate) from the synthetic dataset:
+
+| Metric | Score |
+|--------|-------|
+| Accuracy | 99.93% |
+| Precision | 100% |
+| Recall | 98% |
+| F1 Score | 98.95% |
+
+Class imbalance (3.4% positive rate) handled via XGBoost `scale_pos_weight`. Model saved as `models/mule_classifier.pkl`.
 
 ---
 
-*Powered by OpenAI • SerpAPI • Streamlit • Razorpay*
+## Database Schema
+
+- **cases** — fraud case submissions with status tracking
+- **transactions** — hop-by-hop money trail with amounts and time deltas
+- **vpa_registry** — VPA risk scores, flags, and case history (compounding data moat)
+- **case_reports** — investigation results, graph JSON, report markdown
+- **knowledge_base** — RBI/NPCI advisories with pgvector embeddings for RAG
+- **analyst_feedback** — confirmed/rejected verdicts for model retraining
+
+---
+
+## Key Algorithms
+
+**BFS Graph Traversal (PostgreSQL Recursive CTE):** Traces transaction chains up to 3 hops deep with cycle prevention. A single fraud VPA can expand to reveal networks of 300+ connected accounts.
+
+**RAG Scam Classification:** Cosine similarity search over 1536-dimensional embeddings of RBI/NPCI advisories using pgvector's `<=>` operator. Matches incoming cases against known fraud patterns.
+
+**SHAP TreeExplainer:** Per-prediction feature importance decomposition on the XGBoost model. Top contributing features returned in plain English for analyst review.
+
+**Graph Metrics:** Degree centrality, fan-out ratio, and cluster coefficient computed in-memory from the BFS expansion result to identify hub nodes and syndicate structures.
+
+---
+
+## Built By
+
+**Shashwat Shekhar**
+B.Tech Computer Science, 2nd Year — VIT Vellore
+- Email: shashwatshekhar06@gmail.com
+- GitHub: [github.com/shashwatshekhar06-gif](https://github.com/shashwatshekhar06-gif)
+- LinkedIn: [linkedin.com/in/shashwat-shekhar-5158451bb](https://linkedin.com/in/shashwat-shekhar-5158451bb)
